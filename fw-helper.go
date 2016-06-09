@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"os/exec"
 	"regexp"
@@ -40,19 +41,23 @@ func main() {
 	}
 }
 
-type M map[string]string
+type M map[string]interface{}
 
+func (m M) GetString(k string) string {
+	v, _ := m[k].(string)
+	return v
+}
 func (m M) Message() string {
-	return m["MESSAGE"]
+	return m.GetString("MESSAGE")
 }
 
 func (m M) Service() string {
-	return m["SYSLOG_IDENTIFIER"]
+	return m.GetString("SYSLOG_IDENTIFIER")
 }
 func (m M) TS() time.Time {
-	t, _ := strconv.ParseInt(m["_SOURCE_REALTIME_TIMESTAMP"], 10, 64)
+	t, _ := strconv.ParseInt(m.GetString("_SOURCE_REALTIME_TIMESTAMP"), 10, 64)
 	if t == 0 {
-		t, _ = strconv.ParseInt(m["__REALTIME_TIMESTAMP"], 10, 64)
+		t, _ = strconv.ParseInt(m.GetString("__REALTIME_TIMESTAMP"), 10, 64)
 	}
 	return time.Unix(0, t*1000)
 }
@@ -71,8 +76,12 @@ func readJournal() chan M {
 		for {
 			var m M
 			if err := jr.Decode(&m); err != nil {
-				log.Println(err)
-				break
+				log.Printf("%+v: %v", m, err)
+				if err == io.EOF {
+					break
+				} else {
+					continue
+				}
 			}
 			ch <- m
 		}
